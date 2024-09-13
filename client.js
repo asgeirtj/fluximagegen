@@ -2,64 +2,58 @@ document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('generatorForm');
     const modelSelect = document.getElementById('model');
     const imageUploadDiv = document.getElementById('imageUploadDiv');
-    const dropZone = document.getElementById('dropZone');
     const imageUpload = document.getElementById('imageUpload');
     const result = document.getElementById('result');
     const spinner = document.getElementById('spinner');
     const log = document.getElementById('log');
     const generateButton = document.getElementById('generateButton');
+    const notificationArea = document.getElementById('notificationArea');
+    const resetDefaultsButton = document.getElementById('resetDefaults');
 
-    // Update UI based on selected model
+    const defaultValues = {
+        model: 'text-to-image',
+        imageSize: 'square',
+        steps: 35,
+        guidance: 18,
+        numImages: 1,
+        seed: ''
+    };
+
     modelSelect.addEventListener('change', () => {
         const selectedModel = modelSelect.value;
         imageUploadDiv.style.display = selectedModel === 'image-to-image' ? 'block' : 'none';
     });
 
-    // Handle file drop and selection
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('dragover');
+    resetDefaultsButton.addEventListener('click', () => {
+        Object.keys(defaultValues).forEach(key => {
+            const element = document.getElementById(key);
+            if (element) {
+                element.value = defaultValues[key];
+                if (element.type === 'range') {
+                    document.getElementById(`${key}Value`).textContent = defaultValues[key];
+                }
+            }
+        });
     });
 
-    dropZone.addEventListener('dragleave', () => {
-        dropZone.classList.remove('dragover');
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-        if (e.dataTransfer.files.length) {
-            imageUpload.files = e.dataTransfer.files;
-            dropZone.textContent = e.dataTransfer.files[0].name;
-        }
-    });
-
-    dropZone.addEventListener('click', () => {
-        imageUpload.click();
-    });
-
-    imageUpload.addEventListener('change', () => {
-        if (imageUpload.files.length) {
-            dropZone.textContent = imageUpload.files[0].name;
-        }
-    });
-
-    // Handle form submission
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        generateImage();
+        await generateImage();
     });
 
-    // You can also add a click event listener to the button if you prefer
-    generateButton.addEventListener('click', (e) => {
-        e.preventDefault();
-        generateImage();
+    document.addEventListener('keydown', async function(event) {
+        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+            event.preventDefault();
+            await generateImage();
+        }
     });
 
     async function generateImage() {
         spinner.style.display = 'block';
-        result.innerHTML = '';
         log.innerHTML = '';
+        notificationArea.innerHTML = 'Generating image...';
+        notificationArea.style.display = 'block';
+        result.innerHTML = ''; // Clear previous results
 
         const formData = new FormData(form);
         const model = formData.get('model');
@@ -69,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
             image_size: formData.get('imageSize'),
             num_inference_steps: parseInt(formData.get('steps')) || 35,
             guidance_scale: parseFloat(formData.get('guidance')) || 18,
-            num_images: parseInt(formData.get('numImages')) || 4,
+            num_images: parseInt(formData.get('numImages')) || 1,
             seed: formData.get('seed') ? parseInt(formData.get('seed')) : undefined,
             enable_safety_checker: false
         };
@@ -82,19 +76,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (model === 'image-to-image') {
             if (imageUpload.files.length) {
                 const file = imageUpload.files[0];
-                const reader = new FileReader();
-                reader.onload = async (event) => {
-                    input.image_url = await uploadImage(file);
-                    await sendGenerateRequest(model, input);
-                };
-                reader.readAsDataURL(file);
+                input.image_url = await uploadImage(file);
             } else {
                 log.innerHTML = 'Please upload an image for Image to Image model.';
                 spinner.style.display = 'none';
+                notificationArea.style.display = 'none';
+                return;
             }
-        } else {
-            await sendGenerateRequest(model, input);
         }
+
+        await sendGenerateRequest(model, input);
     }
 
     async function uploadImage(file) {
@@ -131,24 +122,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             console.log('Received generate response:', data);
-            displayResults(data);
+            displayResultsAndInfo(data);
         } catch (error) {
             console.error('Error in generateImage:', error);
             log.innerHTML = `Error: ${error.message}`;
         } finally {
             spinner.style.display = 'none';
+            notificationArea.style.display = 'none';
         }
     }
 
-    function displayResults(data) {
-        result.innerHTML = '';
+    function displayResultsAndInfo(data) {
+        result.innerHTML = ''; // Clear previous results
+        
         data.images.forEach((image, index) => {
+            const imageContainer = document.createElement('div');
+            imageContainer.className = 'image-container';
+    
             const img = document.createElement('img');
             img.src = image.url;
             img.alt = `Generated Image ${index + 1}`;
-            result.appendChild(img);
+    
+            const caption = document.createElement('p');
+            caption.textContent = `G: ${image.guidanceScale}, S: ${image.inferenceSteps}`;
+    
+            imageContainer.appendChild(img);
+            imageContainer.appendChild(caption);
+            
+            result.appendChild(imageContainer);
         });
-        log.innerHTML = `Seed used: ${data.seed}`;
+
+        // Adjust grid layout for 3 images
+        if (data.images.length === 3) {
+            result.style.gridTemplateColumns = 'repeat(2, 1fr)';
+            result.lastElementChild.style.gridColumn = '1 / -1';
+        } else {
+            result.style.gridTemplateColumns = 'repeat(auto-fit, minmax(200px, 1fr))';
+        }
+        
+        // Scroll to the newly added images
+        result.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function debounce(func, wait = 100) {
@@ -158,22 +171,16 @@ document.addEventListener('DOMContentLoaded', () => {
             timeout = setTimeout(() => func.apply(this, args), wait);
         };
     }
-    
+
     ['steps', 'guidance'].forEach(id => {
         const input = document.getElementById(id);
         const value = document.getElementById(`${id}Value`);
         input.addEventListener('input', debounce(() => {
             value.textContent = input.value;
-        }, 50)); // Adjust the debounce delay as needed
+        }, 50));
     });
-    
 
-    // Ensure the initial values are displayed correctly when the page loads
-    window.addEventListener('DOMContentLoaded', () => {
-        const stepsInput = document.getElementById('steps');
-        const guidanceInput = document.getElementById('guidance');
-
-        document.getElementById('stepsValue').textContent = stepsInput.value;
-        document.getElementById('guidanceValue').textContent = guidanceInput.value;
-    });
+    // Initialize range input values
+    document.getElementById('stepsValue').textContent = document.getElementById('steps').value;
+    document.getElementById('guidanceValue').textContent = document.getElementById('guidance').value;
 });
