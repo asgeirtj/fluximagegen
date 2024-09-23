@@ -1,51 +1,41 @@
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('generatorForm');
-    const modelSelect = document.getElementById('model');
-    const imageUploadDiv = document.getElementById('imageUploadDiv');
-    const imageUpload = document.getElementById('imageUpload');
     const result = document.getElementById('result');
     const spinner = document.getElementById('spinner');
     const log = document.getElementById('log');
-    const generateButton = document.getElementById('generateButton');
     const notificationArea = document.getElementById('notificationArea');
+    const modelSelect = document.getElementById('model');
+    const imageUploadDiv = document.getElementById('imageUploadDiv');
+    const imageUpload = document.getElementById('imageUpload');
+    const stepsInput = document.getElementById('steps');
+    const stepsValue = document.getElementById('stepsValue');
+    const guidanceInput = document.getElementById('guidance');
+    const guidanceValue = document.getElementById('guidanceValue');
     const resetDefaultsButton = document.getElementById('resetDefaults');
 
-    const defaultValues = {
-        model: 'text-to-image',
-        imageSize: 'square',
-        steps: 35,
-        guidance: 18,
-        numImages: 1,
-        seed: ''
-    };
-
     modelSelect.addEventListener('change', () => {
-        const selectedModel = modelSelect.value;
-        imageUploadDiv.style.display = selectedModel === 'image-to-image' ? 'block' : 'none';
+        imageUploadDiv.style.display = modelSelect.value === 'image-to-image' ? 'block' : 'none';
+    });
+
+    stepsInput.addEventListener('input', () => {
+        stepsValue.textContent = stepsInput.value;
+    });
+
+    guidanceInput.addEventListener('input', () => {
+        guidanceValue.textContent = guidanceInput.value;
     });
 
     resetDefaultsButton.addEventListener('click', () => {
-        Object.keys(defaultValues).forEach(key => {
-            const element = document.getElementById(key);
-            if (element) {
-                element.value = defaultValues[key];
-                if (element.type === 'range') {
-                    document.getElementById(`${key}Value`).textContent = defaultValues[key];
-                }
-            }
-        });
+        stepsInput.value = 35;
+        stepsValue.textContent = '35';
+        guidanceInput.value = 18;
+        guidanceValue.textContent = '18';
+        document.getElementById('seed').value = '';
     });
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         await generateImage();
-    });
-
-    document.addEventListener('keydown', async function(event) {
-        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-            event.preventDefault();
-            await generateImage();
-        }
     });
 
     async function generateImage() {
@@ -84,30 +74,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
         }
-
         await sendGenerateRequest(model, input);
+        await fetchAndDisplayPreviousImages();
     }
 
     async function uploadImage(file) {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch('/upload', {
-            method: 'POST',
-            body: formData,
-        });
+        try {
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            if (!response.ok) {
+                throw new Error('Image upload failed');
+            }
+
+            const data = await response.json();
+            return data.fileUrl;
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            throw error;
         }
-
-        const data = await response.json();
-        return data.fileUrl;
     }
 
     async function sendGenerateRequest(model, input) {
         try {
-            console.log('Sending generate request:', { model, input });
             const response = await fetch('/generate', {
                 method: 'POST',
                 headers: {
@@ -117,14 +111,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error('Image generation failed');
             }
 
             const data = await response.json();
-            console.log('Received generate response:', data);
-            displayResultsAndInfo(data);
+            displayImages(data.images);
+            log.innerHTML = `Seed: ${data.seed}`;
         } catch (error) {
-            console.error('Error in generateImage:', error);
+            console.error('Error:', error);
             log.innerHTML = `Error: ${error.message}`;
         } finally {
             spinner.style.display = 'none';
@@ -132,55 +126,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function displayResultsAndInfo(data) {
+    function displayImages(images) {
         result.innerHTML = ''; // Clear previous results
-        
-        data.images.forEach((image, index) => {
-            const imageContainer = document.createElement('div');
-            imageContainer.className = 'image-container';
-    
+        images.forEach(image => {
+            const container = document.createElement('div');
+            container.className = 'image-container';
             const img = document.createElement('img');
             img.src = image.url;
-            img.alt = `Generated Image ${index + 1}`;
-    
-            const caption = document.createElement('p');
-            caption.textContent = `G: ${image.guidanceScale}, S: ${image.inferenceSteps}`;
-    
-            imageContainer.appendChild(img);
-            imageContainer.appendChild(caption);
-            
-            result.appendChild(imageContainer);
+            img.alt = 'Generated Image';
+            container.appendChild(img);
+            result.appendChild(container);
         });
-
-        // Adjust grid layout for 3 images
-        if (data.images.length === 3) {
-            result.style.gridTemplateColumns = 'repeat(2, 1fr)';
-            result.lastElementChild.style.gridColumn = '1 / -1';
-        } else {
-            result.style.gridTemplateColumns = 'repeat(auto-fit, minmax(200px, 1fr))';
-        }
-        
-        // Scroll to the newly added images
-        result.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-
-    function debounce(func, wait = 100) {
-        let timeout;
-        return (...args) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), wait);
-        };
-    }
-
-    ['steps', 'guidance'].forEach(id => {
-        const input = document.getElementById(id);
-        const value = document.getElementById(`${id}Value`);
-        input.addEventListener('input', debounce(() => {
-            value.textContent = input.value;
-        }, 50));
-    });
-
-    // Initialize range input values
-    document.getElementById('stepsValue').textContent = document.getElementById('steps').value;
-    document.getElementById('guidanceValue').textContent = document.getElementById('guidance').value;
 });
+
+async function fetchAndDisplayPreviousImages() {
+    try {
+        const response = await fetch('/previous-images');
+        const images = await response.json();
+        const previousImagesDiv = document.getElementById('previousImages');
+        previousImagesDiv.innerHTML = ''; // Clear existing images
+        images.forEach(image => {
+            const imgElement = document.createElement('img');
+            imgElement.src = image.url;
+            imgElement.alt = 'Generated Image';
+            previousImagesDiv.appendChild(imgElement);
+        });
+    } catch (error) {
+        console.error('Error fetching previous images:', error);
+    }
+}
