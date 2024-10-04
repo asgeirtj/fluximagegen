@@ -1,4 +1,6 @@
-node_modules/
-saved_images/
-uploads/
-package-lock.json
+*
+!app.js
+!client.js
+!index.html
+!README.md
+!.gitignore
