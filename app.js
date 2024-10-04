@@ -26,24 +26,38 @@ const savedImagesDir = path.join(__dirname, 'saved_images');
 fs.mkdir(savedImagesDir, { recursive: true }).catch(console.error);
 
 const modelMap = {
-    'flux-pro': 'fal-ai/flux-pro',
+    'flux-pro': 'fal-ai/flux-pro/v1.1',
     'text-to-image': 'fal-ai/flux/dev',
     'image-to-image': 'fal-ai/flux/dev/image-to-image',
     'text-to-image-schnell': 'fal-ai/flux/schnell',
-    'sdxl': 'fal-ai/lora'
+    'flux-lora': 'fal-ai/flux-lora',
+    'flux-reference': 'fal-ai/flux-reference'
 };
 
 app.post('/generate', async (req, res) => {
-    try {
-        const { model, input } = req.body;
-        console.log('Received generate request:', { model, input, seed: input.seed });
+    console.log('Received /generate request');
+    const { model, input } = req.body;
+    console.log('Request body:', { model, input });
 
+    try {
         const falModel = modelMap[model];
         if (!falModel) {
             throw new Error(`Invalid model: ${model}`);
         }
 
         const adjustedInput = adjustInputForModel(model, input);
+        console.log('Adjusted input:', adjustedInput);
+
+        // Ensure LoRA weights are passed correctly for flux-lora model
+        if (model === 'flux-lora' && adjustedInput.loras && adjustedInput.loras.length > 0) {
+            console.log('Using LoRA weights (server-side):', adjustedInput.loras);
+        }
+
+        // Only remove num_inference_steps and guidance_scale for flux-pro
+        if (model === 'flux-pro') {
+            delete adjustedInput.num_inference_steps;
+            delete adjustedInput.guidance_scale;
+        }
 
         const result = await fal.subscribe(falModel, {
             input: adjustedInput,
@@ -56,11 +70,12 @@ app.post('/generate', async (req, res) => {
         });
 
         console.log('Generation result:', result);
+        console.log('Number of images returned by API:', result.images.length);
 
         const savedImages = await saveImages(
-            result.images, 
-            input.prompt, 
-            adjustedInput.guidance_scale, 
+            result.images.slice(0, adjustedInput.num_images),
+            input.prompt,
+            adjustedInput.guidance_scale,
             adjustedInput.num_inference_steps
         );
 
@@ -69,47 +84,41 @@ app.post('/generate', async (req, res) => {
             seed: result.seed
         });
     } catch (error) {
-        console.error('Error in /generate:', error);
-        res.status(500).json({ error: error.message });
+        console.error('Error in image generation:', error);
+        res.status(500).json({ error: error.message, stack: error.stack });
     }
 });
 
 function adjustInputForModel(model, input) {
-    const adjustedInput = { ...input };
+    const adjustedInput = { ...input, enable_safety_checker: false };
 
-    if (input.image_size) {
-        adjustedInput.image_size = input.image_size.replace('x', '_');
-    }
-
-    adjustedInput.num_inference_steps = adjustedInput.num_inference_steps || 35;
-    adjustedInput.guidance_scale = adjustedInput.guidance_scale || 2;
-    adjustedInput.num_images = adjustedInput.num_images || 1;
-
-    if (!adjustedInput.seed) {
-        adjustedInput.seed = Math.floor(Math.random() * 1000000000);
-    }
+    adjustedInput.num_images = Math.min(Math.max(parseInt(input.num_images) || 1, 1), 4);
 
     switch (model) {
         case 'flux-pro':
             adjustedInput.safety_tolerance = "6";
             break;
-        case 'text-to-image':
-            adjustedInput.enable_safety_checker = false;
-            break;
-        case 'image-to-image':
-            adjustedInput.enable_safety_checker = false;
-            adjustedInput.strength = adjustedInput.strength || 0.95;
-            break;
         case 'text-to-image-schnell':
-            adjustedInput.enable_safety_checker = false;
-            adjustedInput.num_inference_steps = Math.min(adjustedInput.num_inference_steps || 12, 12);
+            adjustedInput.num_inference_steps = Math.min(adjustedInput.num_inference_steps || 35, 12);
             delete adjustedInput.guidance_scale;
             break;
-        case 'sdxl':
-            adjustedInput.model_name = "stabilityai/stable-diffusion-xl-base-1.0";
+        case 'flux-lora':
+            // Ensure loras is an array and each item has path and scale
+            adjustedInput.loras = (input.loras || []).map(lora => ({
+                path: lora.path.trim(), // Trim any whitespace
+                scale: parseFloat(lora.scale) || 1
+            })).filter(lora => lora.path); // Filter out any empty paths
+            
+            console.log('LoRA weights (after adjustment):', adjustedInput.loras); // Log for debugging
+            break;
+        case 'image-to-image':
+            adjustedInput.strength = adjustedInput.strength || 0.95;
             break;
     }
 
+    adjustedInput.enable_safety_checker = false;
+
+    console.log('Adjusted input for model:', model, adjustedInput);
     return adjustedInput;
 }
 
@@ -118,21 +127,26 @@ async function saveImages(images, prompt, guidanceScale, inferenceSteps) {
     for (let i = 0; i < images.length; i++) {
         const image = images[i];
         const truncatedPrompt = prompt.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 20);
-        const fileName = `${truncatedPrompt}_g${guidanceScale}_s${inferenceSteps}_${i + 1}.png`;
+        const timestamp = Date.now();
+        const fileName = `${truncatedPrompt}_g${guidanceScale}_s${inferenceSteps}_${timestamp}_${i + 1}.png`;
         const filePath = path.join(savedImagesDir, fileName);
         
-        const response = await axios.get(image.url, { responseType: 'arraybuffer' });
-        
-        await sharp(response.data)
-            .png()
-            .toFile(filePath);
-        
-        savedImages.push({
-            url: `/saved_images/${fileName}`,
-            content_type: 'image/png',
-            guidanceScale: guidanceScale,
-            inferenceSteps: inferenceSteps
-        });
+        try {
+            const response = await axios.get(image.url, { responseType: 'arraybuffer' });
+            
+            await sharp(response.data)
+                .png()
+                .toFile(filePath);
+            
+            savedImages.push({
+                url: `/saved_images/${fileName}`,
+                content_type: 'image/png',
+                guidanceScale: guidanceScale,
+                inferenceSteps: inferenceSteps
+            });
+        } catch (error) {
+            console.error(`Error saving image ${fileName}:`, error);
+        }
     }
     return savedImages;
 }
@@ -151,9 +165,17 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 app.get('/previous-images', async (req, res) => {
     try {
         const files = await fs.readdir(savedImagesDir);
-        const images = files.map(file => ({
-            url: `/saved_images/${file}`
-        }));
+        const imagePromises = files.map(async file => {
+            const filePath = path.join(savedImagesDir, file);
+            const stats = await fs.stat(filePath);
+            return {
+                url: `/saved_images/${file}`,
+                createdAt: stats.birthtime
+            };
+        });
+        const images = await Promise.all(imagePromises);
+        // Sort images by creation time, most recent first
+        images.sort((a, b) => b.createdAt - a.createdAt);
         res.json(images);
     } catch (error) {
         console.error('Error fetching previous images:', error);

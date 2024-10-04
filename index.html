@@ -4,234 +4,287 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Image Generator</title>
+    <link rel="icon" href="https://i.imgur.com/Q2bkN2K.png" type="image/png">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
+        body, html {
             margin: 0;
-            padding: 20px;
-            background-color: #f4f4f4;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            height: 100%;
+            overflow: hidden;
         }
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
             display: flex;
-            flex-wrap: wrap;
+            height: 100vh;
         }
-        h1 {
-            width: 100%;
+        .form-section {
+            width: 300px;
+            padding: 20px;
+            background-color: #f0f0f0;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+        .result-section {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        h1, h2 {
+            margin-top: 0;
             text-align: center;
             color: #333;
         }
-        .form-section {
-            flex: 1;
-            min-width: 300px;
-            padding-right: 20px;
-        }
-        .result-section {
-            flex: 2;
-            min-width: 300px;
-        }
         label {
             display: block;
-            margin-bottom: 5px;
+            margin-top: 10px;
         }
         input[type="text"], select, input[type="number"] {
             width: 100%;
             padding: 8px;
-            margin-bottom: 10px;
+            margin-top: 5px;
             border: 1px solid #ddd;
             border-radius: 4px;
+            box-sizing: border-box;
         }
-        input[type="submit"] {
+
+        /* Remove custom styling for number input spinners */
+        input[type="number"] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        /* Show default arrows for number inputs */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+            -webkit-appearance: inner-spin-button;
+            opacity: 1;
+        }
+
+        /* Styling for range input (slider) container */
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Styling for range input (slider) */
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 10px;
+            border-radius: 5px;
+            background: #d3d3d3;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+
+        input[type="range"]:hover {
+            opacity: 1;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+
+        /* Styling for slider value input */
+        .slider-value {
+            width: 50px;
+            text-align: center;
+        }
+
+        #prompt {
+            width: fit-content;
+            min-width: 100%; /* Ensures it takes full width of its container */
+            height: 60px;
+            resize: both; /* Allows user to resize the textarea */
+        }
+        input[type="submit"], button {
+            width: 100%;
             background-color: #4CAF50;
             color: white;
-            padding: 10px 15px;
+            padding: 10px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            margin-top: 10px;
         }
-        input[type="submit"]:hover {
+        input[type="submit"]:hover, button:hover {
             background-color: #45a049;
         }
         .image-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
             margin-top: 20px;
         }
+        .image-grid.images-1 {
+            grid-template-columns: 1fr;
+        }
+        .image-grid.images-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+        .image-grid.images-3, .image-grid.images-4 {
+            grid-template-columns: 1fr 1fr;
+        }
         .image-container {
-            width: 100%;
-            padding-bottom: 100%; /* Creates a square aspect ratio */
             position: relative;
-            overflow: hidden;
+            width: 100%;
+            max-width: 1024px; /* Maximum width of the largest image */
+            margin-bottom: 20px;
         }
         .image-container img {
-            position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
-            height: 100%;
-            object-fit: cover;
+            height: auto;
+            display: block;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
         }
-        .spinner {
-            display: none;
-            text-align: center;
-            margin-top: 20px;
-        }
-        .advanced-options {
-            margin-top: 10px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        .advanced-options summary {
-            cursor: pointer;
-        }
-        #notificationArea {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background-color: #f0f0f0;
-            padding: 10px;
-            text-align: center;
-            display: none;
-            z-index: 1000;
+        .image-container img:hover {
+            transform: scale(1.05);
         }
         @media (max-width: 768px) {
             .container {
                 flex-direction: column;
             }
-            .form-section, .result-section {
+            .form-section {
                 width: 100%;
-                padding-right: 0;
+                height: auto;
+                max-height: 50vh;
+            }
+            .result-section {
+                height: 50vh;
             }
         }
-        .previous-images-section {
-            margin-top: 30px;
-            padding: 20px;
-            background-color: #f9f9f9;
-            border-radius: 5px;
+
+        .number-input-container {
+            display: flex;
+            align-items: center;
         }
-        .previous-images-section h2 {
-            margin-bottom: 15px;
+
+        .number-input-button {
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            cursor: pointer;
+            padding: 5px 10px;
+            font-size: 14px;
+        }
+
+        .number-input-button:hover {
+            background-color: #e0e0e0;
+        }
+
+        .number-input-container input[type="number"] {
+            text-align: center;
+            -moz-appearance: textfield;
+            -webkit-appearance: textfield;
+            appearance: textfield;
+        }
+
+        .number-input-container input[type="number"]::-webkit-inner-spin-button,
+        .number-input-container input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>AI Image Generator</h1>
-
         <div class="form-section">
+            <h1>AI Image Generator</h1>
             <form id="generatorForm">
-                <div>
-                    <label for="model">Model:</label>
-                    <select id="model" name="model">
-                        <option value="text-to-image">Text to Image [dev] FLUX.1</option>
-                        <option value="flux-pro">[pro] FLUX.1</option>
-                        <option value="image-to-image">Image to Image [dev]</option>
-                        <option value="text-to-image-schnell">Text to Image [schnell]</option>
-                        <option value="sdxl">SDXL</option>
-                    </select>
-                </div>
+                <label for="model">Model:</label>
+                <select id="model" name="model">
+                    <option value="flux-reference">Flux Reference</option>
+                    <option value="text-to-image">Text to Image [dev] FLUX.1</option>
+                    <option value="flux-pro">[pro] FLUX 1.1 [pro]</option>
+                    <option value="image-to-image">Image to Image [dev]</option>
+                    <option value="text-to-image-schnell">Text to Image [schnell]</option>
+                    <option value="flux-lora">FLUX.1 Lora</option>
+                </select>
 
-                <div>
-                    <label for="prompt">Prompt:</label>
-                    <input type="text" id="prompt" name="prompt" required>
-                </div>
+                <label for="prompt">Prompt:</label>
+                <textarea id="prompt" name="prompt" required rows="3" placeholder="Enter your prompt here. Press CMD+Enter (or Ctrl+Enter) to generate."></textarea>
 
                 <div id="imageUploadDiv" style="display: none;">
-                    <label for="imageUpload">Image Upload (for Image to Image):</label>
+                    <label for="imageUpload">Image Upload:</label>
                     <input type="file" id="imageUpload" name="imageUpload">
                 </div>
 
-                <div>
-                    <label for="imageSize">Image Size:</label>
-                    <select id="imageSize" name="imageSize">
-                        <option value="portrait_4_3">Portrait 4:3 - 768x1024</option>
-                        <option value="square_hd">Square HD - 1024x1024</option>
-                        <option value="square">Square - 512x512</option>
-                        <option value="landscape_4_3">Landscape 4:3 - 1024x768</option>
-                        <option value="portrait_16_9">Portrait 16:9 - 576x1024</option>
-                        <option value="landscape_16_9">Landscape 16:9 - 1024x576</option>
-                    </select>
-                </div>
+                <label for="imageSize">Image Size:</label>
+                <select id="imageSize" name="imageSize">
+                    <option value="portrait_4_3">Portrait 4:3 - 768x1024</option>
+                    <option value="square_hd">Square HD - 1024x1024</option>
+                    <option value="square">Square - 512x512</option>
+                    <option value="landscape_4_3">Landscape 4:3 - 1024x768</option>
+                    <option value="portrait_16_9">Portrait 16:9 - 576x1024</option>
+                    <option value="landscape_16_9">Landscape 16:9 - 1024x576</option>
+                </select>
 
-                <div>
-                    <label for="steps">Num Inference Steps: <span id="stepsValue">35</span></label>
+                <label for="steps">Num Inference Steps:</label>
+                <div class="slider-container">
                     <input type="range" id="steps" name="steps" min="1" max="50" value="35">
+                    <input type="number" id="stepsValue" class="slider-value" min="1" max="50" value="35">
                 </div>
 
-                <div>
-                    <label for="guidance">Guidance Scale: <span id="guidanceValue">18</span></label>
+                <label for="guidance">Guidance Scale:</label>
+                <div class="slider-container">
                     <input type="range" id="guidance" name="guidance" min="1" max="20" value="18" step="0.1">
+                    <input type="number" id="guidanceValue" class="slider-value" min="1" max="20" value="18" step="0.1">
                 </div>
 
-                <div>
-                    <label for="numImages">Number of Images:</label>
+                <label for="numImages">Number of Images:</label>
+                <div class="number-input-container">
                     <input type="number" id="numImages" name="numImages" min="1" max="4" value="1">
                 </div>
 
-                <details class="advanced-options">
-                    <summary>Advanced Options</summary>
-                    <div>
-                        <label for="seed">Seed (optional):</label>
-                        <input type="text" id="seed" name="seed">
-                    </div>
-                    <button type="button" id="resetDefaults">Reset to Defaults</button>
-                </details>
+                <div id="loraWeightsDiv" style="display: none;">
+                    <label>LoRA Weights:</label>
+                    <div id="loraWeightsContainer"></div>
+                    <button type="button" id="addLora">Add LoRA</button>
+                </div>
 
-                <input type="submit" id="generateButton" value="Generate Image">
+                <label for="seed">Seed (optional):</label>
+                <input type="text" id="seed" name="seed">
+
+                <button type="button" id="resetDefaults">Reset to Defaults</button>
+                <input type="submit" value="Generate Image">
             </form>
+            <div id="spinner" style="display: none;">Loading...</div>
+            <div id="notificationArea"></div>
+            <div id="log"></div>
         </div>
 
         <div class="result-section">
-            <div id="result" class="image-grid"></div>
-            <div id="spinner" class="spinner">Loading...</div>
-            <div id="log"></div>
+            <h2>Generated Images</h2>
+            <div id="currentImages" class="image-grid"></div>
+            <h2>Previous Images</h2>
+            <div id="previousImages" class="image-grid"></div>
         </div>
     </div>
 
-    <div class="previous-images-section">
-        <h2>Previously Generated Images</h2>
-        <div id="previousImages" class="image-grid"></div>
-    </div>
-
-    <div id="notificationArea"></div>
-
-    <script src="client.js"></script>
-    <script>
-        // Fetch and display previously generated images on page load
-        async function fetchAndDisplayPreviousImages() {
-            try {
-                const response = await fetch('/previous-images');
-                const images = await response.json();
-                const previousImagesDiv = document.getElementById('previousImages');
-                previousImagesDiv.innerHTML = ''; // Clear existing images
-                images.forEach(image => {
-                    const imgElement = document.createElement('img');
-                    imgElement.src = image.url;
-                    imgElement.alt = 'Generated Image';
-                    previousImagesDiv.appendChild(imgElement);
-                });
-            } catch (error) {
-                console.error('Error fetching previous images:', error);
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', fetchAndDisplayPreviousImages);
-
-        // Add event listener to refresh previous images after new image generation
-        document.getElementById('generatorForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            await generateImage();
-            fetchAndDisplayPreviousImages();
-        });
-    </script>
+    <script src="client.js" defer></script>
 </body>
 </html>
