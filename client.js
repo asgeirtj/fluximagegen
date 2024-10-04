@@ -93,20 +93,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     guidanceInput.addEventListener('input', () => {
-        guidanceSlider.value = guidanceInput.value;
+        const value = parseFloat(guidanceInput.value);
+        if (!isNaN(value) && value >= 1 && value <= 20) {
+            guidanceSlider.value = value;
+        }
+    });
+
+    // Update number of images input
+    numImagesInput.addEventListener('input', () => {
+        let value = parseInt(numImagesInput.value);
+        if (isNaN(value) || value < 1) {
+            value = 1;
+        } else if (value > 4) {
+            value = 4;
+        }
+        numImagesInput.value = value;
     });
 
     // Event listeners for custom number input buttons
     decreaseNumImagesButton.addEventListener('click', () => {
         let currentValue = parseInt(numImagesInput.value);
-        if (currentValue > parseInt(numImagesInput.min)) {
+        if (currentValue > 1) {
             numImagesInput.value = currentValue - 1;
         }
     });
 
     increaseNumImagesButton.addEventListener('click', () => {
         let currentValue = parseInt(numImagesInput.value);
-        if (currentValue < parseInt(numImagesInput.max)) {
+        if (currentValue < 4) {
             numImagesInput.value = currentValue + 1;
         }
     });
@@ -263,21 +277,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const imageContainer = document.getElementById('currentImages');
         imageContainer.innerHTML = ''; // Clear existing images
 
-        images.forEach(image => {
-            const container = document.createElement('div');
-            container.classList.add('image-container');
+        // Create a grid container
+        const gridContainer = document.createElement('div');
+        gridContainer.style.display = 'grid';
+        gridContainer.style.gridGap = '10px'; // Add a small gap between images
+        gridContainer.style.justifyContent = 'center'; // Center the grid
 
+        // Set grid template based on number of images
+        if (images.length <= 2) {
+            gridContainer.style.gridTemplateColumns = 'repeat(2, 1fr)';
+        } else {
+            gridContainer.style.gridTemplateColumns = 'repeat(2, 1fr)';
+            gridContainer.style.gridTemplateRows = 'repeat(2, auto)';
+        }
+
+        images.forEach(image => {
             const imgElement = document.createElement('img');
             imgElement.src = image.url;
             imgElement.alt = 'Generated Image';
+            imgElement.style.width = '100%'; // Make image fill its grid cell
+            imgElement.style.height = 'auto'; // Maintain aspect ratio
 
-            // No need to enlarge the image on click since it's already at real size
-            // Remove the click event listener
-            // imgElement.addEventListener('click', () => enlargeImage(imgElement.src));
-
-            container.appendChild(imgElement);
-            imageContainer.appendChild(container);
+            gridContainer.appendChild(imgElement);
         });
+
+        imageContainer.appendChild(gridContainer);
     }
 
     // Function to add LoRA weight
@@ -314,4 +338,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         loraWeightsContainer.appendChild(loraWeightDiv);
     }
+
+    // Add this new event listener for the prompt textarea
+    promptInput.addEventListener('keydown', (event) => {
+        // Check if it's Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
+        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+            event.preventDefault(); // Prevent default behavior (new line in textarea)
+            generateImage(); // Call the generateImage function
+        }
+    });
 });
