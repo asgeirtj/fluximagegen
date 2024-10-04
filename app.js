@@ -103,13 +103,11 @@ function adjustInputForModel(model, input) {
             delete adjustedInput.guidance_scale;
             break;
         case 'flux-lora':
-            // Ensure loras is an array and each item has path and scale
             adjustedInput.loras = (input.loras || []).map(lora => ({
-                path: lora.path.trim(), // Trim any whitespace
+                path: lora.path.trim(),
                 scale: parseFloat(lora.scale) || 1
-            })).filter(lora => lora.path); // Filter out any empty paths
-            
-            console.log('LoRA weights (after adjustment):', adjustedInput.loras); // Log for debugging
+            })).filter(lora => lora.path);
+            console.log('LoRA weights (after adjustment):', adjustedInput.loras);
             break;
         case 'image-to-image':
             adjustedInput.strength = adjustedInput.strength || 0.95;
@@ -130,14 +128,14 @@ async function saveImages(images, prompt, guidanceScale, inferenceSteps) {
         const timestamp = Date.now();
         const fileName = `${truncatedPrompt}_g${guidanceScale}_s${inferenceSteps}_${timestamp}_${i + 1}.png`;
         const filePath = path.join(savedImagesDir, fileName);
-        
+
         try {
             const response = await axios.get(image.url, { responseType: 'arraybuffer' });
-            
+
             await sharp(response.data)
                 .png()
                 .toFile(filePath);
-            
+
             savedImages.push({
                 url: `/saved_images/${fileName}`,
                 content_type: 'image/png',
@@ -173,9 +171,11 @@ app.get('/previous-images', async (req, res) => {
                 createdAt: stats.birthtime
             };
         });
-        const images = await Promise.all(imagePromises);
+        let images = await Promise.all(imagePromises);
         // Sort images by creation time, most recent first
         images.sort((a, b) => b.createdAt - a.createdAt);
+        // Limit the number of images sent to the client
+        images = images.slice(0, 50); // Adjust the number as needed
         res.json(images);
     } catch (error) {
         console.error('Error fetching previous images:', error);

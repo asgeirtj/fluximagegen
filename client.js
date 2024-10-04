@@ -1,9 +1,5 @@
 console.log('client.js loaded');
 
-let isGenerating = false;
-let debounceTimer;
-let imageQueue = [];
-
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM content loaded');
     const form = document.getElementById('generatorForm');
@@ -24,40 +20,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const guidanceSlider = document.getElementById('guidance');
     const guidanceInput = document.getElementById('guidanceValue');
     const numImagesInput = document.getElementById('numImages');
+    const decreaseNumImagesButton = document.getElementById('decreaseNumImages');
+    const increaseNumImagesButton = document.getElementById('increaseNumImages');
 
     if (!form || !modelSelect || !loraWeightsContainer || !loraWeightsDiv || !numImagesInput) {
         console.error('One or more required elements not found');
         return;
-    }
-
-    // Function to create number input with arrows
-    function createNumberInput(input, min, max, step) {
-        const container = document.createElement('div');
-        container.className = 'number-input-container';
-
-        const decreaseButton = document.createElement('button');
-        decreaseButton.textContent = '▼';
-        decreaseButton.className = 'number-input-button';
-        decreaseButton.onclick = (e) => {
-            e.preventDefault();
-            input.value = Math.max(min, parseFloat(input.value) - step).toFixed(step < 1 ? 1 : 0);
-            input.dispatchEvent(new Event('input'));
-        };
-
-        const increaseButton = document.createElement('button');
-        increaseButton.textContent = '▲';
-        increaseButton.className = 'number-input-button';
-        increaseButton.onclick = (e) => {
-            e.preventDefault();
-            input.value = Math.min(max, parseFloat(input.value) + step).toFixed(step < 1 ? 1 : 0);
-            input.dispatchEvent(new Event('input'));
-        };
-
-        container.appendChild(decreaseButton);
-        container.appendChild(input.cloneNode(true));
-        container.appendChild(increaseButton);
-
-        return container;
     }
 
     // Function to update the display of LoRA weights section
@@ -128,14 +96,25 @@ document.addEventListener('DOMContentLoaded', () => {
         guidanceSlider.value = guidanceInput.value;
     });
 
+    // Event listeners for custom number input buttons
+    decreaseNumImagesButton.addEventListener('click', () => {
+        let currentValue = parseInt(numImagesInput.value);
+        if (currentValue > parseInt(numImagesInput.min)) {
+            numImagesInput.value = currentValue - 1;
+        }
+    });
+
+    increaseNumImagesButton.addEventListener('click', () => {
+        let currentValue = parseInt(numImagesInput.value);
+        if (currentValue < parseInt(numImagesInput.max)) {
+            numImagesInput.value = currentValue + 1;
+        }
+    });
+
     // Event listener for form submission
     form.addEventListener('submit', (event) => {
         event.preventDefault();
-        console.log('Form submitted at:', new Date().toISOString());
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-            generateImage();
-        }, 100); // 100ms debounce
+        generateImage();
     });
 
     // Function to fetch and display previous images
@@ -148,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const images = await response.json();
             if (Array.isArray(images) && images.length > 0) {
-                displayPreviousImages(images);
+                displayPreviousImages(images.slice(0, 20)); // Display only the latest 20 images
             } else {
                 console.log('No previous images found');
                 const previousImagesDiv = document.getElementById('previousImages');
@@ -212,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Function to generate image
     async function generateImage() {
         console.log('generateImage function called at:', new Date().toISOString());
-        
+
         const formData = new FormData(form);
         const model = formData.get('model');
         const randomSuffix = Math.floor(Math.random() * 1000000);
@@ -237,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     input.loras.push({ path, scale });
                 }
             });
-            console.log('LoRA weights (client-side):', input.loras); // Enhanced logging
+            console.log('LoRA weights (client-side):', input.loras);
         }
 
         // Clear previous results
@@ -249,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
             log.innerHTML = '';
             notificationArea.innerHTML = 'Generating image...';
             notificationArea.style.display = 'block';
-            
+
             console.log('Processing request with input:', input);
 
             const response = await fetch('/generate', {
@@ -285,10 +264,19 @@ document.addEventListener('DOMContentLoaded', () => {
         imageContainer.innerHTML = ''; // Clear existing images
 
         images.forEach(image => {
+            const container = document.createElement('div');
+            container.classList.add('image-container');
+
             const imgElement = document.createElement('img');
             imgElement.src = image.url;
             imgElement.alt = 'Generated Image';
-            imageContainer.appendChild(imgElement);
+
+            // No need to enlarge the image on click since it's already at real size
+            // Remove the click event listener
+            // imgElement.addEventListener('click', () => enlargeImage(imgElement.src));
+
+            container.appendChild(imgElement);
+            imageContainer.appendChild(container);
         });
     }
 
